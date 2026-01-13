@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Post-it AR Pro - Máximo Alcance</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <style>
+      .ui-overlay { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
+      .btn { padding: 15px 25px; background: #2196F3; color: white; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; pointer-events: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.3); font-family: sans-serif; }
+      .color-grid { display: none; grid-template-columns: repeat(4, 1fr); gap: 10px; background: white; padding: 15px; border-radius: 15px; pointer-events: auto; border: 2px solid #2196F3; }
+      .color-dot { width: 35px; height: 35px; border-radius: 50%; cursor: pointer; border: 2px solid #eee; }
+      #delete-btn { background: #f44336; display: none; }
+    </style>
+  </head>
+  <body style="margin: 0; overflow: hidden;">
+
+    <div class="ui-overlay">
+      <div id="grid" class="color-grid">
+        <div class="color-dot" style="background: #FFEB3B" onclick="app.setColor('#FFEB3B')"></div>
+        <div class="color-dot" style="background: #FF5252" onclick="app.setColor('#FF5252')"></div>
+        <div class="color-dot" style="background: #69F0AE" onclick="app.setColor('#69F0AE')"></div>
+        <div class="color-dot" style="background: #40C4FF" onclick="app.setColor('#40C4FF')"></div>
+      </div>
+      <button id="add-btn" class="btn" onclick="app.openNew()">+ Nueva Nota</button>
+      <button id="delete-btn" class="btn" onclick="app.deleteCurrent()">Eliminar Nota</button>
+    </div>
+
+    <script>
+      const app = {
+        notes: JSON.parse(localStorage.getItem('ar-notes-v6') || '[]'),
+        selectedId: null,
+        marker: null,
+
+        init: function() {
+          this.marker = document.querySelector('#ancla');
+          this.marker.addEventListener('markerFound', () => this.render());
+        },
+
+        calculateGridPosition: function(index) {
+          const cols = 3;
+          const spacing = 1.625;
+          const x = (index % cols) * spacing - ((cols - 1) * spacing) / 2;
+          const z = Math.floor(index / cols) * -spacing; 
+          return { x: x, y: 0.25, z: z };
+        },
+
+        openNew: function() {
+          const text = prompt("Texto de la nota:");
+          if (!text) return;
+          const id = 'note-' + Date.now();
+          const pos = this.calculateGridPosition(this.notes.length);
+          this.notes.push({ id: id, text: text, color: '#FFEB3B', pos: pos });
+          this.save();
+          this.edit(id);
+        },
+
+        edit: function(id) {
+          this.selectedId = id;
+          const note = this.notes.find(n => n.id === id);
+          if(!note) return;
+          document.getElementById('grid').style.display = 'grid';
+          document.getElementById('delete-btn').style.display = 'block';
+        },
+
+        setColor: function(color) {
+          const note = this.notes.find(n => n.id === this.selectedId);
+          if (note) note.color = color;
+          this.hideMenus();
+          this.save();
+        },
+
+        deleteCurrent: function() {
+          this.notes = this.notes.filter(n => n.id !== this.selectedId);
+          this.notes = this.notes.map((n, index) => ({...n, pos: this.calculateGridPosition(index)}));
+          this.hideMenus();
+          this.save();
+        },
+
+        hideMenus: function() {
+          document.getElementById('grid').style.display = 'none';
+          document.getElementById('delete-btn').style.display = 'none';
+        },
+
+        save: function() {
+          localStorage.setItem('ar-notes-v6', JSON.stringify(this.notes));
+          this.render();
+        },
+
+        render: function() {
+          const oldNotes = this.marker.querySelectorAll('.nota-virtual');
+          oldNotes.forEach(n => n.parentNode.removeChild(n));
+
+          this.notes.forEach(data => {
+            const container = document.createElement('a-entity');
+            container.setAttribute('class', 'nota-virtual clickable');
+            container.setAttribute('position', data.pos);
+            container.setAttribute('look-at', '[camera]');
+
+            const bg = document.createElement('a-plane');
+            bg.setAttribute('width', '1.375');
+            bg.setAttribute('height', '0.875');
+            bg.setAttribute('color', data.color);
+            bg.setAttribute('material', 'shader: flat; side: double');
+
+            const txt = document.createElement('a-text');
+            txt.setAttribute('value', data.text);
+            txt.setAttribute('align', 'center');
+            txt.setAttribute('color', '#000');
+            txt.setAttribute('width', '3.75');
+            txt.setAttribute('position', '0 0 0.075');
+
+            container.addEventListener('mousedown', () => this.edit(data.id));
+
+            container.appendChild(bg);
+            container.appendChild(txt);
+            this.marker.appendChild(container);
+          });
+        }
+      };
+      window.onload = () => app.init();
+    </script>
+
+    <a-scene embedded 
+             arjs="sourceType: webcam; 
+                   sourceWidth:1280; sourceHeight:960; 
+                   displayWidth: 1280; displayHeight: 960;
+                   debugUIEnabled: false; 
+                   detectionMode: mono_and_matrix; 
+                   matrixCodeType: 3x3;
+                   imageSmoothingEnabled: false;
+                   canvasWidth: 1280; canvasHeight: 960;" 
+             cursor="rayOrigin: mouse; fuse: false" 
+             raycaster="objects: .clickable">
+      
+      <a-marker preset="hiro" id="ancla" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
+          <a-sphere radius="0.0625" color="red"></a-sphere>
+          <a-plane rotation="-90 0 0" width="6.25" height="6.25" color="#fff" opacity="0.1"></a-plane>
+      </a-marker>
+      
+      <a-entity camera></a-entity>
+    </a-scene>
+  </body>
+</html>
